@@ -4,6 +4,7 @@ import datetime
 import yt_dlp
 import json
 import argparse
+import shutil
 
 global dict_output
 global test_path
@@ -36,13 +37,29 @@ def build_dict(temp_dict):
 # Writing dict objects to JSON.
 def write_to_json(dict_out):
     json_object = json.dumps(dict_out, indent=4, ensure_ascii=False)
-    with open("videos_metadata_test.json", "w+", encoding='utf-8') as jsonoutfile:
+    with open("videos_metadata.json", "w+", encoding='utf-8') as jsonoutfile:
         jsonoutfile.write(json_object)
         jsonoutfile.write("\n")
+
+
 def denoise(filename_to_denoise):
-    print(filename_to_denoise)
-    return filename_to_denoise
-    # sys.exit()
+    # print(filename_to_denoise)
+    filename_to_denoise = filename_to_denoise.strip(".m4a").replace(" ", "\ ")
+    # filename_to_denoise = filename_to_denoise
+    os.system(f"cp {filename_to_denoise}.wav ./noisy/")
+    # shutil.copy(f"./{filename_to_denoise}.wav", "./noisy")
+    try:
+        os.system(f"python3 -m denoiser.enhance --noisy_dir=./noisy/ --out_dir=./enchanced/ --device='cuda' --streaming")
+        # os.remove(f"{}")
+        temp_file = filename_to_denoise.strip('.wav').split("/")[1]
+        os.system(f"rm -rf ./enchanced/{temp_file}_noisy.wav")
+        # os.system(f"rm -rf ./noisy/{filename_to_denoise}.wav")
+        if os.path.exists(temp_file+("_enhanced.wav")):
+            return temp_file+("_enhanced.wav")
+        return False
+    except Exception as E:
+        print(f"Cuda Exception: {E}\nNoisy directory contains noise files.\n")
+        return False
 
 # After downloading the videos, This def triggers.
 # All the metadata available, formed as dict.
@@ -64,7 +81,7 @@ def postprocess_hook(d):
                                 "time" : datetime.datetime.now().strftime("%H:%M:%S")
                             },
             "DownloadedBy" : args.name,
-            "Enhanced" : denoise(d['filename']),
+            "Enhanced" : False,
             "Assignedto" : False,
             "aupfilename" : False,
             "clips" : False,
@@ -106,11 +123,21 @@ print(args.name)
 
 # Initially read Json, to get max of Ids.
 try:
-    dict_output = read_json(f"videos_metadata{test_path}.json")
+    dict_output = read_json(f"videos_metadata.json")
 except Exception as E:
     print("\nException: ", E)
 
 with yt_dlp.YoutubeDL(youtube_options()) as ydl:
     ydl.download(URLS)
 
+for item in dict_output:
+    for key, value in item.items():
+        # print(value)
+        try:
+            if value["Enhanced"] == False:
+                value["Enhanced"] = denoise(value['filepath'])
+        except Exception as E:
+            print(f"Exception: {E}")
+
 write_to_json(dict_output)
+sys.exit()
